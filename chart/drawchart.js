@@ -5,8 +5,12 @@ let countryData = undefined;
 let countrySummary = undefined;
 
 let config = {
-    visibleCountries: new Set()
+    visibleCountries: new Set(),
+    logScale: false
 };
+
+let formatDate = d3.timeFormat("%Y-%m-%d");
+let z = d3.scaleOrdinal(d3.schemeCategory10);
 
 d3.csv("../data/time_series_19-covid-Confirmed.csv").then(
     d => {
@@ -16,8 +20,13 @@ d3.csv("../data/time_series_19-covid-Confirmed.csv").then(
         countrySummary = getCountrySummary(countryData);
         showCountryList(countrySummary);
 
-        setAllCountries(true);
+        showCountries(['Italy', 'Spain', 'Germany', 'Switzerland']);
 
+        d3.select("#logScale").on("change", (d, i, nodes) => {
+            config.logScale = nodes[i].checked;
+            console.log("logscale:" + config.logScale);
+            updateChart(countryData, config);
+        });
         d3.select("#selectAllCountries").on("change", (d, i, nodes) => {
             config.visibleCountries = new Set();
             setAllCountries(nodes[i].checked);
@@ -42,6 +51,14 @@ d3.csv("../data/time_series_19-covid-Confirmed.csv").then(
                 if(status) config.visibleCountries.add(d.country);
             });
         }
+        function showCountries(lst) {
+            config.visibleCountries = new Set(lst);
+            d3.selectAll("input.countrySel").each( (d, i, nodes) => {
+                if(config.visibleCountries.has(d.country)) {
+                    nodes[i].checked = true;
+                }
+            });
+        }
     }
 );
 
@@ -55,26 +72,25 @@ function updateChart(data, config) {
     svg.selectAll("*").remove();
 
     let processedData = data.filter( d => config.visibleCountries.has(d.country));
-    console.log(processedData);
-    if(!processedData||processedData.length==0) return;
+    if(!processedData||processedData.length===0) return;
 
-    // console.log(a);
-    // console.log(ex);
-    window.procd = processedData;
-    let x = d3.scaleTime()
+
+    let x = d3.scaleLinear()
         .rangeRound([margin.left, width - margin.right])
-        .domain(getExtent(processedData.map( d => d.data), d => d.date));
+        .domain(getExtent(processedData.map( d => d.data), d => d.day));
 
-    var y = d3.scaleLinear()
+    let scaleY = d3.scaleLinear();
+    if (config.logScale) {
+        scaleY = d3.scaleLog();
+    }
+    var y = scaleY
         .rangeRound([height - margin.bottom, margin.top])
         .domain(getExtent(processedData.map(d=>d.data), it => it.confirmed));
-
-    var z = d3.scaleOrdinal(d3.schemeCategory10);
 
     svg.append("g")
         .attr("class", "x-axis")
         .attr("transform", "translate(0," + (height - margin.bottom) + ")")
-        .call(d3.axisBottom(x).tickFormat(d3.timeFormat("%b")));
+        .call(d3.axisBottom(x));
 
     svg.append("g")
         .attr("class", "y-axis")
@@ -83,7 +99,7 @@ function updateChart(data, config) {
 
     var line = d3.line()
         .curve(d3.curveCardinal)
-        .x(d => x(d.date))
+        .x(d => x(d.day))
         .y(d => y(d.confirmed));
 
     var g = svg.selectAll()
@@ -95,80 +111,35 @@ function updateChart(data, config) {
         .style("stroke", d => z(d.country))
         .attr("d", d => line(d.data));
 
+
+    let tooltipDiv = d3.select("div.tooltip");
     g.selectAll("circle")
         .data( d => d.data)
         .enter()
         .append("circle")
-            .attr("cx", d => x(d.date))
+            .attr("cx", d => x(d.day))
             .attr("cy", d => y(d.confirmed))
             .attr("fill", d => z(d.country))
-            .attr("r", 3.5);
+            .attr("r", 3.5)
+        .on("mouseover", (d, i, nodes) => {
+            d3.select(nodes[i]).transition()
+                .attr("r", d => 8);
+            tooltipDiv.transition()
+                .duration(200)
+                .style("opacity", .9);
+            tooltipDiv.html(d.country+"<br/>"+
+                formatDate(d.date) + "<br/>Confirmed: " + d.confirmed + "<br/>Diff: "+d3.format("+")(d.delta))
+                .style("left", (d3.event.pageX - 20) + "px")
+                .style("top", (d3.event.pageY + 6) + "px");
+        })
+        .on("mouseout", (d, i, nodes) => {
+            d3.select(nodes[i]).transition()
+                .attr("r", d => 3.5);
+            tooltipDiv.transition()
+                .duration(200)
+                .style("opacity", 0);
+        });
 
-    function tooltip(copy) {
-
-        var labels = focus.selectAll(".lineHoverText")
-            .data(copy);
-
-        labels.enter().append("text")
-            .attr("class", "lineHoverText")
-            .style("fill", d => z(d))
-            .attr("text-anchor", "start")
-            .attr("font-size", 12)
-            .attr("dy", (_, i) => 1 + i * 2 + "em")
-            .merge(labels);
-
-        var circles = focus.selectAll(".hoverCircle")
-            .data(copy);
-
-        circles.enter().append("circle")
-            .attr("class", "hoverCircle")
-            .style("fill", d => z(d))
-            .attr("r", 2.5)
-            .merge(circles);
-
-        svg.selectAll(".overlay")
-            .on("mouseover", function () {
-                focus.style("display", null);
-            })
-            .on("mouseout", function () {
-                focus.style("display", "none");
-            })
-            .on("mousemove", mousemove);
-
-        function mousemove() {
-
-            var x0 = x.invert(d3.mouse(this)[0]),
-                i = bisectDate(data, x0, 1),
-                d0 = data[i - 1],
-                d1 = data[i],
-                d = x0 - d0.date > d1.date - x0 ? d1 : d0;
-
-            focus.select(".lineHover")
-                .attr("transform", "translate(" + x(d.date) + "," + height + ")");
-
-            focus.select(".lineHoverDate")
-                .attr("transform",
-                    "translate(" + x(d.date) + "," + (height + margin.bottom) + ")")
-                .text(formatDate(d.date));
-
-            focus.selectAll(".hoverCircle")
-                .attr("cy", e => y(d[e]))
-                .attr("cx", x(d.date));
-
-            focus.selectAll(".lineHoverText")
-                .attr("transform",
-                    "translate(" + (x(d.date)) + "," + height / 2.5 + ")")
-                .text(e => e + " " + "º" + formatValue(d[e]));
-
-            x(d.date) > (width - width / 4)
-                ? focus.selectAll("text.lineHoverText")
-                    .attr("text-anchor", "end")
-                    .attr("dx", -10)
-                : focus.selectAll("text.lineHoverText")
-                    .attr("text-anchor", "start")
-                    .attr("dx", 10)
-        }
-    }
 }
 
 
@@ -186,6 +157,8 @@ function showCountryList(data) {
     countryEnter
         .append('label')
         .attr('for',  d => "input_"+d.country)
+        .attr('class', "tag")
+        .style('background', d => z(d.country))
         .text(d => d.country);
 }
 
@@ -193,7 +166,7 @@ function showCountryList(data) {
 function getCountrySummary(data) {
     let result = data
         .map(item => {
-            console.log("doing "+item.country);
+            console.log("proc:", item);
             return {
                 country: item.country,
                 maxConfirmed: item.data[item.data.length-1].confirmed,
@@ -226,13 +199,18 @@ function aggregateCountries(data) {
         }
         let keys = Object.keys(m).sort();
         let days = {};
+        let delta = {};
         for( let d = 0; d<keys.length; d++) {
             days[keys[d]] = d;
+            delta[keys[d]] = 0;
+            if (d > 0) {
+                delta[keys[d]] = m[keys[d]]-m[keys[d-1]];
+            }
         }
         result.push({
             country: country,
             data: keys.map(k => {
-                return {date: new Date(Number(k)), confirmed: m[k], day: days[k], country: country}
+                return {date: new Date(Number(k)), confirmed: m[k], day: days[k], delta: delta[k], country: country}
             }).filter( it => it.confirmed>0)
         });
     }

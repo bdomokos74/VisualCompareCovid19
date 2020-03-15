@@ -47,3 +47,26 @@ body {
     max-height: 800px;
     overflow: auto
 }
+
+
+div.tooltip {
+    position: absolute;
+    text-align: left;
+    width: 130px;
+    height: 75px;
+    padding: 4px;
+    font: 16px sans-serif;
+    color: black;
+    font-weight: 500;
+    background: lightsteelblue;
+    border: 0px;
+    border-radius: 4px;
+    pointer-events: none;
+}
+
+label.tag {
+    font-size: 16px;
+    color:black;
+    margin: 5px;
+    border-radius: 2px;
+}
