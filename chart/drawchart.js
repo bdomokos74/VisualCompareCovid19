@@ -12,7 +12,7 @@ let config = {
 let formatDate = d3.timeFormat("%Y-%m-%d");
 let z = d3.scaleOrdinal(d3.schemeCategory10);
 
-d3.csv("../data/time_series_19-covid-Confirmed.csv").then(
+d3.csv("time_series_19-covid-Confirmed.csv").then(
     d => {
         rawData = d;
         procData = rawData.map(getDataPoint).filter( d => d.data[d.data.length-1].confirmed!=0);
