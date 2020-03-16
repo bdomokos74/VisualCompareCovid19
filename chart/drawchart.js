@@ -92,10 +92,23 @@ function updateChart(data, config) {
         .attr("transform", "translate(0," + (height - margin.bottom) + ")")
         .call(d3.axisBottom(x));
 
+    svg.append("text")      // text label for the x-axis
+        .attr("x", width / 2 )
+        .attr("y",  height + margin.bottom)
+        .style("text-anchor", "middle")
+        .text("Days since first confirmed case in that country");
+
     svg.append("g")
         .attr("class", "y-axis")
         .attr("transform", "translate(" + margin.left + ",0)")
         .call(d3.axisLeft(y));
+
+    svg.append("text")      // text label for the y-axis
+        .attr("y",120 - margin.left)
+        .attr("x", 50 - (height / 2))
+        .attr("transform", "rotate(-90)")
+        .style("text-anchor", "end")
+        .text("Confirmed cases");
 
     var line = d3.line()
         .curve(d3.curveCardinal)

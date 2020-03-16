@@ -31,7 +31,7 @@ body {
 }
 
 .left {
-    margin-right: 20px;
+    margin-right: 40px;
     float: left;
 }
 
@@ -48,6 +48,9 @@ body {
     overflow: auto
 }
 
+ul#countryList {
+    list-style-type: none;
+}
 
 div.tooltip {
     position: absolute;
