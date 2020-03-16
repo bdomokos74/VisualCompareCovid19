@@ -7,22 +7,24 @@
 </head>
 
 <body>
-<div class="left">
-    <svg id="chart" width="850" height="820"></svg>
-</div>
-<div class="right">
-    <span>Countries</span><br/>
-    <span><input id="selectAllCountries" type="checkbox"><label for="selectAllcountries">All</label></span>
-    <span><input id="logScale" type="checkbox"><label for="logScale">Log Scale</label></span>
-    <div class="sideContainer">
-        <ul id="countryList">
-        </ul>
+<div class="container">
+    <div class="left">
+        <svg id="chart" width="800" height="820"></svg>
     </div>
+    <div class="left">
+        <span>Countries</span><br/>
+        <span><input id="selectAllCountries" type="checkbox"><label for="selectAllcountries">All</label></span>
+        <span><input id="logScale" type="checkbox"><label for="logScale">Log Scale</label></span>
+        <div class="sideContainer">
+            <ul id="countryList">
+            </ul>
+        </div>
+    </div>
+
 </div>
 <div class="clear">
     <span>Data is from: <a href="https://github.com/CSSEGISandData/COVID-19">https://github.com/CSSEGISandData/COVID-19</a></span>
     <span>Source code: <a href="https://github.com/bdomokos74/VisualCompareCovid19">https://github.com/bdomokos74/VisualCompareCovid19</a></span>
 </div>
-
-<div class="tooltip" style="opacity: 0" />
+<div class="tooltip" style="opacity: 0"/>
 </body>

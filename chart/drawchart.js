@@ -6,17 +6,20 @@ let countrySummary = undefined;
 
 let config = {
     visibleCountries: new Set(),
-    logScale: false
+    logScale: false,
+    threshold: 15
 };
 
 let formatDate = d3.timeFormat("%Y-%m-%d");
-let z = d3.scaleOrdinal(d3.schemeCategory10);
+let formatTooltipDate = d3.timeFormat("%Y-%m-%d %a");
+let z = d3.scaleOrdinal(d3.schemePaired);
 
 d3.csv("chart/time_series_19-covid-Confirmed.csv").then(
     d => {
         rawData = d;
         procData = rawData.map(getDataPoint).filter( d => d.data[d.data.length-1].confirmed!=0);
         countryData = aggregateCountries(procData);
+        countryData = filterLow(countryData, config.threshold);
         countrySummary = getCountrySummary(countryData);
         showCountryList(countrySummary);
 
@@ -65,7 +68,7 @@ d3.csv("chart/time_series_19-covid-Confirmed.csv").then(
 // https://github.com/CSSEGISandData/COVID-19
 function updateChart(data, config) {
     let svg = d3.select("#chart"),
-        margin = {top: 15, right: 35, bottom: 15, left: 85},
+        margin = {top: 15, bottom: 15, left: 85, right: 0},
         width = +svg.attr("width") - margin.left - margin.right,
         height = +svg.attr("height") - margin.top - margin.bottom;
 
@@ -85,7 +88,7 @@ function updateChart(data, config) {
     }
     var y = scaleY
         .rangeRound([height - margin.bottom, margin.top])
-        .domain(getExtent(processedData.map(d=>d.data), it => it.confirmed));
+        .domain([config.threshold, getExtent(processedData.map(d=>d.data), it => it.confirmed)[1]]);
 
     svg.append("g")
         .attr("class", "x-axis")
@@ -96,7 +99,7 @@ function updateChart(data, config) {
         .attr("x", width / 2 )
         .attr("y",  height + margin.bottom)
         .style("text-anchor", "middle")
-        .text("Days since first confirmed case in that country");
+        .text("Days since confirmed cases higher than "+config.threshold+" in that country");
 
     svg.append("g")
         .attr("class", "y-axis")
@@ -126,6 +129,7 @@ function updateChart(data, config) {
 
 
     let tooltipDiv = d3.select("div.tooltip");
+
     g.selectAll("circle")
         .data( d => d.data)
         .enter()
@@ -141,9 +145,9 @@ function updateChart(data, config) {
                 .duration(200)
                 .style("opacity", .9);
             tooltipDiv.html(d.country+"<br/>"+
-                formatDate(d.date) + "<br/>Confirmed: " + d.confirmed + "<br/>Diff: "+d3.format("+")(d.delta))
-                .style("left", (d3.event.pageX - 20) + "px")
-                .style("top", (d3.event.pageY + 6) + "px");
+                formatTooltipDate(d.date) + "<br/>Confirmed: " + d.confirmed + "<br/>Diff: "+d3.format("+")(d.delta))
+                .style("left", (d3.event.pageX + 10) + "px")
+                .style("top", (d3.event.pageY + 10) + "px");
         })
         .on("mouseout", (d, i, nodes) => {
             d3.select(nodes[i]).transition()
@@ -192,6 +196,29 @@ function getCountrySummary(data) {
                 0
     );
     result.reverse();
+    return result;
+}
+
+function filterLow(data, threshold) {
+    let result = [];
+    for(let item of data) {
+        let timeS = item.data;
+        let newTs = [];
+        let keep = false;
+        let idx = 0;
+        for (let dataPoint of timeS) {
+            if (keep || dataPoint.confirmed > threshold) {
+                dataPoint.day = idx;
+                idx += 1;
+                newTs.push(dataPoint);
+                keep  = true;
+            }
+        }
+        if(newTs.length>0) {
+            item.data = newTs;
+            result.push(item);
+        }
+    }
     return result;
 }
 
