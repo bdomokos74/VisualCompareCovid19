@@ -46,7 +46,7 @@ body {
 
 .sideContainer {
     /*width: 200px;*/
-    max-height: 800px;
+    max-height: 300px;
     overflow: auto
 }
 
@@ -80,4 +80,9 @@ label.tag {
     color:black;
     margin: 2px;
     border-radius: 2px;
+}
+
+.ctrl {
+    position: absolute;
+    left: 130px;
 }
