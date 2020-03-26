@@ -1,37 +1,30 @@
 'use strict';
-let rawData = undefined;
-let procData = undefined;
-let data = undefined;
-let locationList = undefined;
 
 const threshold = 15;
 
 let formatDate = d3.timeFormat("%Y-%m-%d");
-let formatTooltipDate = d3.timeFormat("%Y-%m-%d %a");
-let z = d3.scaleOrdinal(d3.schemePaired);
+
 
 d3.csv("chart/time_series_19-covid-Confirmed.csv").then(
     d => {
         dataSet.init(d);
-        controller.init();
         controller.defaultChart();
     }
 );
 
 var controller = {
-    visibleCountries: new Set(),
     logScale: false,
-    countryView: false,
-    countryToShow: undefined,
+    _data: undefined,
 
-    init: function () {
+    setupHandlers: function () {
         d3.select("#logScale").on("change", (d, i, nodes) => {
             this.logScale = nodes[i].checked;
-            chart.updateChart();
+            chart.updateChart(this._data._data, this.logScale);
         });
         d3.select("#selectAllCountries").on("change", (d, i, nodes) => {
-            selectAllCountries(nodes[i].checked);
-            chart.updateChart();
+            this._data.setVisibilityForAll(nodes[i].checked);
+            chart.update(this._data, this.logScale);
+            this.setupHandlers();
         });
         d3.select("#mainmenu").on("click", _ => {
             d3.select("#subtitle")
@@ -40,67 +33,45 @@ var controller = {
         });
         d3.selectAll("input.countrySel").on("change", (d, i, nodes) => {
             console.log(nodes[i].dataset.location + ": " + nodes[i].checked);
-            if (nodes[i].checked) {
-                config.visibleCountries.add(d.location);
-            } else {
-                config.visibleCountries.delete(d.location);
-            }
-            updateChart(data);
+            this._data.setVisibilityForLocation(nodes[i].dataset.location, nodes[i].checked);
+            chart.updateChart(this._data._data, this.logScale);
+            this.setupHandlers();
         });
-
-        function countryClicked(evt, sub) {
-            if (sub !== undefined && sub) return false;
-            let country = evt.target.innerText;
-
-            d3.select("#subtitle")
-                .text(" > " + country);
-            d3.select("#selectAllCountries")
-                .attr('checked', true);
-
-            console.log("clicked: ", country);
-
-            config.countryToShow = country;
-            config.countryView = true;
-
-            data = dataSet.filterCountry(country);
-            data = dataSet.filterLow();
-            locationList = dataSet.getLocationList(data);
-            chart.showLocationList(locationList, true);
-            selectAllCountries(true);
-
-            updateChart();
-        }
+        d3.selectAll("label.country").on("click", (d, i, nodes) => {
+            let target = d3.event.target;
+            console.log("clicked: ", nodes[i], d, d3.event.target);
+            this.countryClicked(target.innerText, target.dataset.subchart);
+        });
     },
+    countryClicked: function (country, sub) {
+        if (sub !== undefined && sub) return false;
 
+        d3.select("#subtitle")
+            .text(" > " + country);
+        d3.select("#selectAllCountries")
+            .attr('checked', true);
+
+        this._data = dataSet.aggregateStates(country);
+        chart.update(this._data);
+        this.setupHandlers();
+    },
     defaultChart: function () {
-        data = dataSet.aggregateCountries(procData);
-        // data = dataSet.filterLow();
-        locationList = dataSet.getLocationList(data, new Set(['Italy', 'Spain', 'Germany', 'Switzerland']));
-        chart.showLocationList(locationList);
-        selectLocations();
-
-        chart.updateChart(data);
-
-        function selectLocations(lst) {
-            config.visibleCountries = new Set(lst);
-            d3.selectAll("input.countrySel").each((d, i, nodes) => {
-                if (config.visibleCountries.has(d.location)) {
-                    nodes[i].checked = true;
-                }
-            });
-        }
-        function selectAllCountries(status) {
-            config.visibleCountries = new Set();
-            d3.selectAll("input.countrySel").each((d, i, nodes) => {
-                nodes[i].checked = status;
-                if (status) config.visibleCountries.add(d.location);
-            });
-        }
+        this._data = dataSet.aggregateCountries();
+        this._data.setVisibleLocations(['Italy', 'Spain', 'Germany', 'Switzerland']);
+        chart.update(this._data);
+        this.setupHandlers();
     }
 };
 
 var chart = {
-    updateChart: function (data) {
+    formatTooltipDate: d3.timeFormat("%Y-%m-%d %a"),
+    z: d3.scaleOrdinal(d3.schemePaired),
+
+    update: function (data, logScale) {
+        this.showLocationList(data._locationList);
+        this.updateChart(data._data, logScale);
+    },
+    updateChart: function (data, logScale) {
         let svg = d3.select("#chart"),
             margin = {top: 15, bottom: 15, left: 85, right: 0},
             width = +svg.attr("width") - margin.left - margin.right,
@@ -108,7 +79,7 @@ var chart = {
 
         svg.selectAll("*").remove();
 
-        let processedData = data.filter(d => config.visibleCountries.has(d.location));
+        let processedData = data.filter(d => d.show);
         if (!processedData || processedData.length === 0) return;
 
         let x = d3.scaleLinear()
@@ -116,7 +87,7 @@ var chart = {
             .domain(this.getExtent(processedData.map(d => d.data), d => d.day));
 
         let scaleY = d3.scaleLinear();
-        if (config.logScale) {
+        if (logScale) {
             scaleY = d3.scaleLog();
         }
         var y = scaleY
@@ -155,9 +126,11 @@ var chart = {
             .data(processedData)
             .enter()
             .insert("g", ".focus");
+
         g.append("path")
             .attr("class", "line cities")
-            .style("stroke", d => z(d.location))
+            .style("stroke", d => this.z(d.location))
+            .style("fill", "none")
             .attr("d", d => line(d.data));
 
 
@@ -169,7 +142,7 @@ var chart = {
             .append("circle")
             .attr("cx", d => x(d.day))
             .attr("cy", d => y(d.confirmed))
-            .attr("fill", d => z(d.location))
+            .attr("fill", d => this.z(d.location))
             .attr("r", 3.5)
             .on("mouseover", (d, i, nodes) => {
                 d3.select(nodes[i]).transition()
@@ -178,7 +151,7 @@ var chart = {
                     .duration(200)
                     .style("opacity", .9);
                 tooltipDiv.html(d.location + "<br/>" +
-                    formatTooltipDate(d.date) + "<br/>Confirmed: " + d.confirmed + "<br/>Diff: " + d3.format("+")(d.delta))
+                    this.formatTooltipDate(d.date) + "<br/>Confirmed: " + d.confirmed + "<br/>Diff: " + d3.format("+")(d.delta))
                     .style("left", (d3.event.pageX + 10) + "px")
                     .style("top", (d3.event.pageY + 10) + "px");
             })
@@ -191,7 +164,7 @@ var chart = {
             });
 
     },
-    showLocationList: function(locationData, subchart) {
+    showLocationList: function (locationData, subchart) {
         let cls = "poi";
         if (subchart) {
             cls = "";
@@ -206,21 +179,83 @@ var chart = {
             .attr('type', 'checkbox')
             .attr('id', d => "input_" + d.location)
             .attr('class', 'countrySel')
-            .attr('data-location', d => d.location);
+            .attr('data-location', d => d.location)
+            .property('checked', d => d.show);
         countryEnter
             .append('label')
             .attr('class', 'tag country ' + cls)
             .attr('data-location', d => d.location)
             .attr('data-subchart', subchart)
-            .style('background', d => z(d.location))
+            .style('background', d => this.z(d.location))
             .text(d => d.location);
+    },
+    getExtent: function (arr, fn) {
+        let result = undefined;
+        for (let item of arr) {
+            let tmp = d3.extent(item, fn);
+            if (result) {
+                tmp.push(...result);
+                result = d3.extent(tmp);
+            } else {
+                result = tmp;
+            }
+        }
+        return result;
     }
 };
 
+class Data {
+    constructor(rawData) {
+        this._data = rawData;
+        this._locationList = getLocationList(rawData);
+
+        function getLocationList(data, visible) {
+            let result = data
+                .map(item => {
+                        // console.log("proc:", item);
+                        return {
+                            location: item.location,
+                            maxConfirmed: Number(item.data[item.data.length - 1].confirmed),
+                            start: item.data[0].date,
+                            show: visible == undefined || visible.has(item.location)
+                        }
+                    }
+                ).sort((a, b) =>
+                    a.maxConfirmed < b.maxConfirmed ? -1 :
+                        a.maxConfirmed > b.maxConfirmed ? 1 :
+                            0
+                );
+            result.reverse();
+            console.log("loclist:", result);
+            return result;
+        }
+    };
+
+    setVisibleLocations(locationList) {
+        let locationSet = locationList ? new Set(locationList) : undefined;
+        let setShow = d => d.show = locationSet !== undefined && locationSet.has(d.location);
+        this._locationList.forEach(setShow);
+        this._data.forEach(setShow);
+    }
+
+    setVisibilityForAll(show) {
+        let setShow = d => d.show = show;
+        this._locationList.forEach(setShow);
+        this._data.forEach(setShow);
+    }
+
+    setVisibilityForLocation(location, show) {
+        let setShow = d => {
+            if(d.location===location) d.show = show;
+        };
+        this._locationList.forEach(setShow);
+        this._data.forEach(setShow);
+    }
+}
 
 var dataSet = {
     init: function (data) {
-        this.rawData = data.map(getDataPoint).filter(d => d.data[d.data.length - 1].confirmed != 0);
+        this._rawData = data.map(getDataPoint).filter(d => d.data[d.data.length - 1].confirmed != 0);
 
         function getDataPoint(d) {
             let parseDate = d3.timeParse("%m/%e/%y");
@@ -238,24 +273,7 @@ var dataSet = {
             return result;
         }
     },
-    getLocationList: function (data, visible) {
-        let result = this.data
-            .map(item => {
-                    console.log("proc:", item);
-                    return {
-                        location: item.location,
-                        maxConfirmed: Number(item.data[item.data.length - 1].confirmed),
-                        start: item.data[0].date
-                    }
-                }
-            ).sort((a, b) =>
-                a.maxConfirmed < b.maxConfirmed ? -1 :
-                    a.maxConfirmed > b.maxConfirmed ? 1 :
-                        0
-            );
-        result.reverse();
-        return result;
-    },
+
 
     filterLow: function (data) {
         let result = [];
@@ -280,12 +298,13 @@ var dataSet = {
         return result;
     },
 
-    filterCountry: function (country) {
+    aggregateStates: function (country) {
         let result = [];
-        procData.filter(d => d.country === country).forEach(d => {
+        this._rawData.filter(d => d.country === country).forEach(d => {
             result.push({
                 location: d.state,
                 data: d.data.slice(),
+                show: true
             });
         });
         result = result.filter(d => d.data !== undefined || d.data.length !== 0);
@@ -305,15 +324,16 @@ var dataSet = {
                 prev = it.confirmed;
             });
         });
-        return result;
+        let filtered = this.filterLow(result);
+        return new Data(filtered);
     },
 
     aggregateCountries: function () {
-        let locationList = new Set(this.data.map(it => it.country));
+        let locationList = new Set(this._rawData.map(it => it.country));
         let result = [];
         for (let country of locationList) {
             let m = {};
-            for (let row of this.data.filter(d => d.country === country)) {
+            for (let row of this._rawData.filter(d => d.country === country)) {
                 for (let item of row.data) {
                     let k = item.date.getTime();
                     if (k in m) {
@@ -335,6 +355,7 @@ var dataSet = {
             }
             result.push({
                 location: country,
+                show: true,
                 data: keys.map(k => {
                     return {
                         date: new Date(Number(k)),
@@ -347,20 +368,6 @@ var dataSet = {
             });
         }
         let filtered = this.filterLow(result);
-        return filtered;
-    },
-
-    getExtent: function (arr, fn) {
-        let result = undefined;
-        for (let item of arr) {
-            let tmp = d3.extent(item, fn);
-            if (result) {
-                tmp.push(...result);
-                result = d3.extent(tmp);
-            } else {
-                result = tmp;
-            }
-        }
-        return result;
+        return new Data(filtered);
     }
 };
