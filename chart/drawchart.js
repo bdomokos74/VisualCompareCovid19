@@ -4,8 +4,7 @@ const threshold = 15;
 
 let formatDate = d3.timeFormat("%Y-%m-%d");
 
-
-d3.csv("chart/time_series_19-covid-Confirmed.csv").then(
+d3.csv("chart/time_series_covid19_confirmed_global.csv").then(
     d => {
         dataSet.init(d);
         controller.defaultChart();
