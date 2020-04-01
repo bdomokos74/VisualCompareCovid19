@@ -3,10 +3,15 @@
 const threshold = 15;
 
 let formatDate = d3.timeFormat("%Y-%m-%d");
-
-d3.csv("chart/time_series_covid19_confirmed_global.csv").then(
+let pGlobal = new Promise( accept =>
+    d3.csv("chart/time_series_covid19_confirmed_global.csv").then( d => accept(d))
+);
+let pUs = new Promise( accept =>
+    d3.csv("chart/time_series_covid19_confirmed_US.csv").then( d => accept(d))
+);
+Promise.all([pGlobal, pUs]).then(
     d => {
-        dataSet.init(d);
+        dataSet.init(d[0], d[1]);
         controller.defaultChart();
     }
 );
@@ -253,11 +258,18 @@ class Data {
 }
 
 var dataSet = {
-    init: function (data) {
-        this._rawData = data.map(getDataPoint).filter(d => d.data[d.data.length - 1].confirmed != 0);
+    init: function (globalData, usData) {
+        let parseDate = d3.timeParse("%m/%e/%y");
+        let parseDateUs = d3.timeParse("%m/%e/%Y");
+        this._rawData = globalData.map(getGlobalDataPoint)
+            .filter(d => d.data[d.data.length - 1].confirmed != 0)
+            .filter( d=> d.country !== 'US');
+        let usDataProcessed = usData.map(getUsDataPoint)
+            .filter(d => d.data[d.data.length - 1].confirmed != 0);
+        let usDataAggr = this.aggregateColumn(usDataProcessed, 'state', 'confirmed');
+        this._rawData.push(...usDataAggr);
 
-        function getDataPoint(d) {
-            let parseDate = d3.timeParse("%m/%e/%y");
+        function getGlobalDataPoint(d) {
             let result = {};
             result['country'] = d['Country/Region'];
             result['state'] = d['Province/State'];
@@ -271,6 +283,22 @@ var dataSet = {
             arr.sort(it => it['date']);
             return result;
         }
+
+        function getUsDataPoint(d) {
+            let result = {};
+            result['country'] = 'US';
+            result['state'] = d['Province_State'];
+            let arr = [];
+            result['data'] = arr;
+            for (let elem of Object.entries(d)) {
+                if (elem[0].match(/^[0-9]/)) {
+                    arr.push({date: parseDateUs(elem[0]), confirmed: Number(elem[1])});
+                }
+            }
+            arr.sort(it => it['date']);
+            return result;
+        }
+
     },
 
 
@@ -368,5 +396,35 @@ var dataSet = {
         }
         let filtered = this.filterLow(result);
         return new Data(filtered);
+    },
+
+    aggregateColumn: function (rawData, keyColName, valueColName) {
+        let locationList = new Set(rawData.map(it => it[keyColName]));
+        let result = [];
+        for (let col of locationList) {
+            let m = {};
+            let template = undefined;
+            for (let row of rawData.filter(d => d[keyColName] === col)) {
+                template = row;
+                for (let item of row.data) {
+                    let k = item.date.getTime();
+                    if (k in m) {
+                        m[k] = m[k] + Number(item[valueColName]);
+                    } else {
+                        m[k] = Number(item[valueColName]);
+                    }
+                }
+            }
+            let item = Object.assign({}, template);
+            let keys = Object.keys(m).sort();
+            item.data = keys.map(k => {
+                    let ret = {date: new Date(Number(k))};
+                    ret[valueColName] = m[k];
+                    return ret;
+                }
+            );
+            result.push(item);
+        }
+        return result;
     }
 };
