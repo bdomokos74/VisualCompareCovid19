@@ -9,9 +9,15 @@ let pGlobal = new Promise( accept =>
 let pUs = new Promise( accept =>
     d3.csv("chart/time_series_covid19_confirmed_US.csv").then( d => accept(d))
 );
+let dGlobal = new Promise( accept =>
+    d3.csv("chart/time_series_covid19_deaths_global.csv").then( d => accept(d))
+);
+let dUs = new Promise( accept =>
+    d3.csv("chart/time_series_covid19_deaths_US.csv").then( d => accept(d))
+);
 Promise.all([pGlobal, pUs]).then(
     d => {
-        dataSet.init(d[0], d[1]);
+        dataSet.init(d[0], d[1], d[2], d[3]);
         controller.defaultChart();
     }
 );
@@ -260,7 +266,6 @@ class Data {
 var dataSet = {
     init: function (globalData, usData) {
         let parseDate = d3.timeParse("%m/%e/%y");
-        let parseDateUs = d3.timeParse("%m/%e/%Y");
         this._rawData = globalData.map(getGlobalDataPoint)
             .filter(d => d.data[d.data.length - 1].confirmed != 0)
             .filter( d=> d.country !== 'US');
@@ -292,7 +297,7 @@ var dataSet = {
             result['data'] = arr;
             for (let elem of Object.entries(d)) {
                 if (elem[0].match(/^[0-9]/)) {
-                    arr.push({date: parseDateUs(elem[0]), confirmed: Number(elem[1])});
+                    arr.push({date: parseDate(elem[0]), confirmed: Number(elem[1])});
                 }
             }
             arr.sort(it => it['date']);
